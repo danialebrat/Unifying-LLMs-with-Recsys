@@ -1,3 +1,6 @@
+import os
+import pickle
+
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from Recommender import *
@@ -7,25 +10,38 @@ import numpy as np
 from torch_geometric.data import Data
 
 class VGCF(Recommender):
-    def __init__(self, content_df, interactions_df, users_df, device=None):
+    def __init__(self, content_df, interactions_df, users_df, device=None, model_path=None):
         super().__init__(content_df, interactions_df, users_df)
         # Mappings from IDs to indices
         self.user_mapping = None
         self.item_mapping = None
+        # Paths for mappings and embeddings
+        self.user_mapping_path = 'model_files/user_mapping.pkl'
+        self.item_mapping_path = 'model_files/item_mapping.pkl'
+        self.initial_node_features_path = 'model_files/initial_node_features.pt'
         # PyTorch Geometric data object
         self.graph_data = None
         # GNN model
         self.model = None
         # Device (CPU or GPU)
         self.device = device if device else torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        # Model path
+        self.model_path = model_path if model_path else 'model_files/best_model.pt'
 
     def build_graph(self):
-        # Build user and item ID mappings
-        user_ids = self.users_df[self.user_id_column].unique()
-        item_ids = self.content_df[self.content_id_column].unique()
-
-        self.user_mapping = {user_id: idx for idx, user_id in enumerate(user_ids)}
-        self.item_mapping = {item_id: idx + len(user_ids) for idx, item_id in enumerate(item_ids)}
+        # Load or build user and item mappings
+        if os.path.exists(self.user_mapping_path) and os.path.exists(self.item_mapping_path):
+            with open(self.user_mapping_path, 'rb') as f:
+                self.user_mapping = pickle.load(f)
+            with open(self.item_mapping_path, 'rb') as f:
+                self.item_mapping = pickle.load(f)
+            print("Loaded user and item mappings.")
+        else:
+            # Build mappings as before
+            user_ids = self.users_df[self.user_id_column].unique()
+            item_ids = self.content_df[self.content_id_column].unique()
+            self.user_mapping = {user_id: idx for idx, user_id in enumerate(user_ids)}
+            self.item_mapping = {item_id: idx + len(user_ids) for idx, item_id in enumerate(item_ids)}
 
         # Build edge index using vectorized operations
         user_indices = self.interactions_df[self.user_id_column].map(self.user_mapping)
@@ -41,10 +57,18 @@ class VGCF(Recommender):
         edge_index = torch.tensor(edge_index, dtype=torch.long)
 
         # Build node features
-        user_embeddings = self._get_embeddings(self.users_df, self.user_id_column, self.user_attribute_column, user_ids)
-        item_embeddings = self._get_embeddings(self.content_df, self.content_id_column, self.content_attribute_column,
-                                               item_ids)
-        node_features = torch.cat([user_embeddings, item_embeddings], dim=0)
+        if os.path.exists(self.initial_node_features_path):
+            node_features = torch.load(self.initial_node_features_path, map_location=self.device)
+            print("Loaded initial node features.")
+        else:
+            user_ids = self.users_df[self.user_id_column].unique()
+            item_ids = self.content_df[self.content_id_column].unique()
+            user_embeddings = self._get_embeddings(self.users_df, self.user_id_column, self.user_attribute_column,
+                                                   user_ids)
+            item_embeddings = self._get_embeddings(self.content_df, self.content_id_column,
+                                                   self.content_attribute_column,
+                                                   item_ids)
+            node_features = torch.cat([user_embeddings, item_embeddings], dim=0)
 
         # Edge attributes (ratings)
         ratings = self.interactions_df['rating']
@@ -68,10 +92,15 @@ class VGCF(Recommender):
         return embeddings
 
     def build_model(self):
+        # Load initial node features if they exist
+        if os.path.exists(self.initial_node_features_path):
+            initial_node_features = torch.load(self.initial_node_features_path, map_location=self.device)
+            print("Loaded initial node features.")
+        else:
+            initial_node_features = self.graph_data.x.to(self.device)
         # Define the GAT model
         input_dim = self.graph_data.num_node_features
-        hidden_dim = 64  # Hidden dimension size[]]\
-        initial_node_features = self.graph_data.x.to(self.device)
+        hidden_dim = 64  # Hidden dimension size
         self.model = GATRecommender(input_dim, hidden_dim, initial_node_features=initial_node_features).to(self.device)
 
     def sample_negative_edges(self, num_negatives=1):
@@ -106,7 +135,7 @@ class VGCF(Recommender):
 
         return positive_edges, negative_edges
 
-    def train_model(self, epochs=75, lr=0.001):
+    def train_model(self, epochs=200, lr=0.001):
 
         self.model.train()
         optimizer = torch.optim.AdamW(self.model.parameters(), lr=lr, weight_decay=1e-5)
@@ -198,13 +227,22 @@ class VGCF(Recommender):
             # Update scheduler
             scheduler.step(loss)
 
-            # Early stopping
+            import pickle
+
             if loss.item() < best_loss:
                 best_loss = loss.item()
                 patience_counter = 0
                 # Save the best model
-                torch.save(self.model.state_dict(), 'best_model.pt')
-                print("New Best Loss: Saving the model")
+                torch.save(self.model.state_dict(), self.model_path)
+                # Save mappings
+                with open(self.user_mapping_path, 'wb') as f:
+                    pickle.dump(self.user_mapping, f)
+                with open(self.item_mapping_path, 'wb') as f:
+                    pickle.dump(self.item_mapping, f)
+                # Save initial node features
+                torch.save(self.graph_data.x, self.initial_node_features_path)
+                print(f"New Best Loss: Saving the model to {self.model_path}")
+
             else:
                 patience_counter += 1
                 if patience_counter >= patience:
@@ -220,9 +258,18 @@ class VGCF(Recommender):
         # Build graph and model if not already done
         if self.graph_data is None:
             self.build_graph()
+
         if self.model is None:
             self.build_model()
-            self.train_model()
+            if os.path.exists(self.model_path):
+                self.model.load_state_dict(torch.load(self.model_path, map_location=self.device))
+                print(f"Loaded model from {self.model_path}")
+            else:
+                self.train_model()
+
+        # if self.model is None:
+        #     self.build_model()
+        #     self.train_model()
 
         # Switch to evaluation mode
         self.model.eval()
