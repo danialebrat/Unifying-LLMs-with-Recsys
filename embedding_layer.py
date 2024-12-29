@@ -84,9 +84,12 @@ class EmbeddingLayer:
     # ----------------------------------------------------------------------------------------------------
     def get_model(self):
 
-        tokenizer = AutoTokenizer.from_pretrained('bert-base-uncased')
-        model = AutoModel.from_pretrained('nomic-ai/nomic-embed-text-v1.5', trust_remote_code=True,
-                                          safe_serialization=True)
+        # tokenizer = AutoTokenizer.from_pretrained('bert-base-uncased')
+        # model = AutoModel.from_pretrained('nomic-ai/nomic-embed-text-v1.5', trust_remote_code=True,
+        #                                   safe_serialization=True)
+
+        tokenizer = AutoTokenizer.from_pretrained('sentence-transformers/all-MiniLM-L6-v2')
+        model = AutoModel.from_pretrained('sentence-transformers/all-MiniLM-L6-v2', trust_remote_code=True)
 
         return model, tokenizer
 

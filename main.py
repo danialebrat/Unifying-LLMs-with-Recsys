@@ -1,6 +1,8 @@
 import pandas as pd
-from Recommender import ClusteredKNN, UserBasedRecommender
 from VGCF import VGCF
+from Vectorized_Clustered_KNN import ClusteredKNN
+from UserBasedRecommender import UserBasedRecommender
+from VNMF import VNMF
 from embedding_layer import EmbeddingLayer
 
 if __name__ == "__main__":
@@ -56,15 +58,31 @@ if __name__ == "__main__":
     # ------------------------------------------------------------
     # vectorized NMF
 
-    recommender = VGCF(users_df=users_df, content_df=content_df, interactions_df=trainset_df)
+    # recommender = VGCF(users_df=users_df, content_df=content_df, interactions_df=trainset_df)
+    # recommender.set_column_names(user_id_column="user_id",
+    #                             content_id_column="movie_id",
+    #                             user_attribute_column="summary_vector",
+    #                             content_attribute_column="movie_info_vector")
+    #
+    # vgcf_recommendations = recommender.get_recommendations()
+    # print("done")
+    # print(vgcf_recommendations.head())
+
+    # ------------------------------------------------------------
+
+    # VNMF profile
+
+    recommender = VNMF(users_df=users_df, content_df=content_df, interactions_df=trainset_df)
     recommender.set_column_names(user_id_column="user_id",
                                 content_id_column="movie_id",
                                 user_attribute_column="summary_vector",
                                 content_attribute_column="movie_info_vector")
 
-    vgcf_recommendations = recommender.get_recommendations()
+    recommender.train_model()
+
+    vnmf_recommendations = recommender.get_recommendations()
     print("done")
-    print(vgcf_recommendations.head())
+    print(vnmf_recommendations.head())
 
 
 
