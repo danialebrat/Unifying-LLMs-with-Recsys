@@ -1,13 +1,14 @@
 import os
 import pickle
-
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-
+from GATRecommender import GATRecommender
+from GATRecommender_advanced import AdvancedGATRecommender
 from Recommender import *
 import torch
 import pandas as pd
 import numpy as np
 from torch_geometric.data import Data
+import torch.nn.functional as F
 
 class VGCF(Recommender):
     def __init__(self, content_df, interactions_df, users_df, device=None, model_path=None):
@@ -16,9 +17,9 @@ class VGCF(Recommender):
         self.user_mapping = None
         self.item_mapping = None
         # Paths for mappings and embeddings
-        self.user_mapping_path = 'model_files/user_mapping.pkl'
-        self.item_mapping_path = 'model_files/item_mapping.pkl'
-        self.initial_node_features_path = 'model_files/initial_node_features.pt'
+        self.user_mapping_path = 'model_files/100K/user_mapping.pkl'
+        self.item_mapping_path = 'model_files/100K/item_mapping.pkl'
+        self.initial_node_features_path = 'model_files/100K/initial_node_features.pt'
         # PyTorch Geometric data object
         self.graph_data = None
         # GNN model
@@ -98,10 +99,27 @@ class VGCF(Recommender):
             print("Loaded initial node features.")
         else:
             initial_node_features = self.graph_data.x.to(self.device)
+
         # Define the GAT model
         input_dim = self.graph_data.num_node_features
         hidden_dim = 64  # Hidden dimension size
         self.model = GATRecommender(input_dim, hidden_dim, initial_node_features=initial_node_features).to(self.device)
+
+        # input_dim = self.graph_data.num_node_features
+        # hidden_dim = 64
+        # num_layers = 3
+        # heads_per_layer = [4, 4, 1]  # Example
+        # dropout_schedule = [0.4, 0.3, 0.2]  # Example of decreasing dropout
+        #
+        # self.model = AdvancedGATRecommender(
+        #     input_dim,
+        #     hidden_dim,
+        #     num_layers=num_layers,
+        #     initial_node_features=initial_node_features,
+        #     heads_per_layer=heads_per_layer,
+        #     dropout_schedule=dropout_schedule,
+        #     normalization='layernorm'  # or 'batchnorm'
+        # ).to(self.device)
 
     def sample_negative_edges(self, num_negatives=1):
         # Map interactions to indices
@@ -254,7 +272,7 @@ class VGCF(Recommender):
     def bpr_loss(self, pos_scores, neg_scores):
         return -torch.log(torch.sigmoid(pos_scores - neg_scores)).mean()
 
-    def get_recommendations(self, N=10):
+    def get_recommendations(self, N=30):
         # Build graph and model if not already done
         if self.graph_data is None:
             self.build_graph()
@@ -266,10 +284,6 @@ class VGCF(Recommender):
                 print(f"Loaded model from {self.model_path}")
             else:
                 self.train_model()
-
-        # if self.model is None:
-        #     self.build_model()
-        #     self.train_model()
 
         # Switch to evaluation mode
         self.model.eval()
