@@ -2,12 +2,15 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 from sklearn.metrics.pairwise import cosine_similarity, cosine_distances
-import Recommender
+from Recommender import Recommender
 
 
 # ----------------------------------------------------------------------------------------------------
 # user_based content_recommender
 class UserBasedRecommender(Recommender):
+
+    def __init__(self, content_df, interactions_df, users_df):
+        super().__init__(content_df, interactions_df, users_df)
 
     def get_recommendations(self):
 
@@ -18,6 +21,8 @@ class UserBasedRecommender(Recommender):
 
         # generate initial recommendations based on cosine similarity profiles
         self.generate_recommendations()
+
+        return self.recommendations_df
 
     # ----------------------------------------------------------------------------------------------------
     def calculate_cosine_similarity(self, batch_size=50):

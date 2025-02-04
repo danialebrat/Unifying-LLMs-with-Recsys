@@ -1,32 +1,36 @@
 import pandas as pd
 
-# from VGCF import VGCF
-# from Vectorized_Clustered_KNN import ClusteredKNN
-# from UserBasedRecommender import UserBasedRecommender
+from GCF import GCF
+from VGCF import VGCF
+from Vectorized_Clustered_KNN import ClusteredKNN
+from UserBasedRecommender import UserBasedRecommender
 # from VNMF import VNMF
 from embedding_layer import EmbeddingLayer
 from RecEvaluator import RecEvaluator
+
 # from baselines.NGCF import NGCF
 
 if __name__ == "__main__":
-    Path = "Dataset/100k/train_test_sets"
+    data = "100k"
+    Path = f"Dataset/{data}/train_test_sets"
 
     # Load the ratings data
     trainset_df = pd.read_csv(f'{Path}/u1.base',
-                            sep='\t',
-                            names=['user_id', 'movie_id', 'rating', 'timestamp'],
-                            encoding='latin-1')
-
+                              sep='\t',
+                              names=['user_id', 'movie_id', 'rating', 'timestamp'],
+                              encoding='latin-1')
 
     testset_df = pd.read_csv(f'{Path}/u1.test',
-                            sep='\t',
-                            names=['user_id', 'movie_id', 'rating', 'timestamp'],
-                            encoding='latin-1')
+                             sep='\t',
+                             names=['user_id', 'movie_id', 'rating', 'timestamp'],
+                             encoding='latin-1')
 
+    users_df = pd.read_csv(f"Dataset/{data}/updated_users_with_summary_df.csv")
+    content_df = pd.read_pickle(f"Dataset/{data}/movies_enriched_dataset.pkl")
 
-    users_df = pd.read_csv("Dataset/100k/users_with_summary_df.csv")
-
-    content_df = pd.read_pickle("Dataset/100k/movies_enriched_dataset.pkl")
+    # Filter rows where 'summary' and 'movie_info' are not null
+    users_df = users_df.dropna(subset=["summary"])
+    content_df = content_df.dropna(subset=["movie_info"])
 
     embedd = EmbeddingLayer()
 
@@ -36,14 +40,14 @@ if __name__ == "__main__":
     # ------------------------------------------------------------
     # clustered_KNN
 
-
     # recommender = ClusteredKNN(users_df=users_df, content_df=content_df, interactions_df=trainset_df)
     # recommender.set_column_names(user_id_column="user_id",
-    #                             content_id_column="movie_id",
-    #                             user_attribute_column="summary_vector",
-    #                             content_attribute_column="movie_info_vector")
+    #                              content_id_column="movie_id",
+    #                              user_attribute_column="summary_vector",
+    #                              content_attribute_column="movie_info_vector")
     #
     # knn_recommendations = recommender.get_recommendations()
+    # knn_recommendations.to_csv(f"CVknn_recommendations_{data}.csv")
     # print("done")
 
     # ------------------------------------------------------------
@@ -51,25 +55,41 @@ if __name__ == "__main__":
 
     # recommender = UserBasedRecommender(users_df=users_df, content_df=content_df, interactions_df=trainset_df)
     # recommender.set_column_names(user_id_column="user_id",
-    #                             content_id_column="movie_id",
-    #                             user_attribute_column="summary_vector",
-    #                             content_attribute_column="movie_info_vector")
+    #                              content_id_column="movie_id",
+    #                              user_attribute_column="summary_vector",
+    #                              content_attribute_column="movie_info_vector")
     #
-    # knn_recommendations = recommender.get_recommendations()
+    # user_based_recommendations = recommender.get_recommendations()
+    # user_based_recommendations.to_csv(f"UB_recommendations_{data}.csv")
     # print("done")
 
     # ------------------------------------------------------------
     # vectorized VGCF
 
-    recommender = VGCF(users_df=users_df, content_df=content_df, interactions_df=trainset_df)
+    # recommender = VGCF(users_df=users_df, content_df=content_df, interactions_df=trainset_df)
+    # recommender.set_column_names(user_id_column="user_id",
+    #                             content_id_column="movie_id",
+    #                             user_attribute_column="summary_vector",
+    #                             content_attribute_column="movie_info_vector")
+    #
+    # vgcf_recommendations = recommender.get_recommendations()
+    # print("done")
+    # print(vgcf_recommendations.head())
+    # vgcf_recommendations.to_csv(f"vgcf_recommendations_{data}.csv")
+
+    # ------------------------------------------------------------
+    # vectorized VGCF
+
+    recommender = GCF(users_df=users_df, content_df=content_df, interactions_df=trainset_df)
     recommender.set_column_names(user_id_column="user_id",
                                 content_id_column="movie_id",
                                 user_attribute_column="summary_vector",
                                 content_attribute_column="movie_info_vector")
 
-    vgcf_recommendations = recommender.get_recommendations()
+    gat_recommendations = recommender.get_recommendations()
     print("done")
-    print(vgcf_recommendations.head())
+    print(gat_recommendations.head())
+    gat_recommendations.to_csv(f"gat_recommendations_{data}.csv")
 
     # ------------------------------------------------------------
 
@@ -92,7 +112,7 @@ if __name__ == "__main__":
     # Instantiate the evaluator
     rec_evaluator = RecEvaluator(
         test_df=testset_df,
-        recommendations_df=vgcf_recommendations,
+        recommendations_df=gat_recommendations,
         user_id_col="user_id",
         item_id_col="movie_id",
         rating_col="rating",  # Column in 'testset_df' for ratings
@@ -101,7 +121,7 @@ if __name__ == "__main__":
     )
 
     # 4. Evaluate at several K values (commonly used in academic papers)
-    k_values = [1, 5, 10, 20, 30]
+    k_values = [1, 5, 10, 20, 30, 40, 50]
 
     # Compute all metrics
     results_df = rec_evaluator.evaluate_all_metrics(k_values)
@@ -121,10 +141,3 @@ if __name__ == "__main__":
     # Now you have:
     # - A CSV file with the numeric results
     # - A plot image (e.g., "evaluation_plot.png") showing metric curves vs. K
-
-
-
-
-
-
-

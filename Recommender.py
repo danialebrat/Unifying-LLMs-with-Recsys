@@ -32,7 +32,7 @@ class Recommender(ABC):
         self.cosine_scores = {}
         self.all_vectors = None
 
-        self.total_recommendations = 45
+        self.total_recommendations = 50
 
         # column names: will be set by user
         self.user_id_column = None

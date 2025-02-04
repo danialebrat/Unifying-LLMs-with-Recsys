@@ -1,14 +1,16 @@
 import os
-import pickle
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from GATRecommender import GATRecommender
-from GATRecommender_advanced import AdvancedGATRecommender
 from Recommender import *
-import torch
 import pandas as pd
-import numpy as np
 from torch_geometric.data import Data
 import torch.nn.functional as F
+import numpy as np
+import torch
+from sklearn.decomposition import PCA
+import umap.umap_ as umap
+import pickle
+
 
 class VGCF(Recommender):
     def __init__(self, content_df, interactions_df, users_df, device=None, model_path=None):
@@ -17,9 +19,9 @@ class VGCF(Recommender):
         self.user_mapping = None
         self.item_mapping = None
         # Paths for mappings and embeddings
-        self.user_mapping_path = 'model_files/100K/user_mapping.pkl'
-        self.item_mapping_path = 'model_files/100K/item_mapping.pkl'
-        self.initial_node_features_path = 'model_files/100K/initial_node_features.pt'
+        self.user_mapping_path = 'model_files/100k/user_mapping.pkl'
+        self.item_mapping_path = 'model_files/100k/item_mapping.pkl'
+        self.initial_node_features_path = 'model_files/100k/initial_node_features.pt'
         # PyTorch Geometric data object
         self.graph_data = None
         # GNN model
@@ -69,6 +71,7 @@ class VGCF(Recommender):
             item_embeddings = self._get_embeddings(self.content_df, self.content_id_column,
                                                    self.content_attribute_column,
                                                    item_ids)
+
             node_features = torch.cat([user_embeddings, item_embeddings], dim=0)
 
         # Edge attributes (ratings)
@@ -82,6 +85,8 @@ class VGCF(Recommender):
         # Create PyTorch Geometric data object
         self.graph_data = Data(x=node_features, edge_index=edge_index, edge_attr=edge_attr).to(self.device)
 
+    # --------------------------------------------------------------------------
+
     def _get_embeddings(self, df, id_column, attribute_column, ids):
         """
         Helper function to extract embeddings in the correct order.
@@ -92,6 +97,7 @@ class VGCF(Recommender):
         embeddings = torch.tensor(np.vstack(embeddings_df[attribute_column].values), dtype=torch.float)
         return embeddings
 
+    # --------------------------------------------------------------------------
     def build_model(self):
         # Load initial node features if they exist
         if os.path.exists(self.initial_node_features_path):
@@ -102,25 +108,44 @@ class VGCF(Recommender):
 
         # Define the GAT model
         input_dim = self.graph_data.num_node_features
-        hidden_dim = 64  # Hidden dimension size
-        self.model = GATRecommender(input_dim, hidden_dim, initial_node_features=initial_node_features).to(self.device)
 
-        # input_dim = self.graph_data.num_node_features
-        # hidden_dim = 64
-        # num_layers = 3
-        # heads_per_layer = [4, 4, 1]  # Example
-        # dropout_schedule = [0.4, 0.3, 0.2]  # Example of decreasing dropout
-        #
-        # self.model = AdvancedGATRecommender(
-        #     input_dim,
-        #     hidden_dim,
-        #     num_layers=num_layers,
+        # Create the data object with edge_index and edge_attr (from PyTorch Geometric).
+        # Initialize the model with your desired configuration.
+        # Suppose we want a 3-layer GAT:
+        layer_dims = [64, 64, 64]  # out_channels for each of 4 layers
+        heads = [4, 4, 1]  # number of heads for each layer
+        dropouts = [0.1, 0.1, 0.1]  # dropout for each layer
+
+        self.model = GATRecommender(
+            input_dim=input_dim,
+            layer_dims=layer_dims,
+            heads=heads,
+            dropouts=dropouts,
+            initial_node_features=initial_node_features
+        ).to(self.device)
+
+        # self.model = GATRecommender(
+        #     input_dim=input_dim,
+        #     encoder_dims=[128, 64, 32],
+        #     decoder_dims=[32, 64, 128],
+        #     encoder_heads=[4, 4, 4],
+        #     decoder_heads=[4, 4, 1],
+        #     encoder_dropouts=[0.3, 0.2],
+        #     decoder_dropouts=[0.1, 0.3],
+        #     edge_dim=1,
         #     initial_node_features=initial_node_features,
-        #     heads_per_layer=heads_per_layer,
-        #     dropout_schedule=dropout_schedule,
-        #     normalization='layernorm'  # or 'batchnorm'
+        #     bottleneck_dim=32 # desired bottleneck embedding size
         # ).to(self.device)
 
+        # self.model = GATRecommender(
+        #     input_dim=input_dim,
+        #     hidden_dim=hidden_dim,
+        #     num_layers=3,
+        #     initial_node_features=initial_node_features,
+        #     head=4
+        # ).to(self.device)
+
+    # --------------------------------------------------------------------------
     def sample_negative_edges(self, num_negatives=1):
         # Map interactions to indices
         user_indices = self.interactions_df[self.user_id_column].map(self.user_mapping)
@@ -153,16 +178,17 @@ class VGCF(Recommender):
 
         return positive_edges, negative_edges
 
-    def train_model(self, epochs=200, lr=0.001):
+    # --------------------------------------------------------------------------
+    def train_model(self, epochs=300, lr=0.001):
 
         self.model.train()
         optimizer = torch.optim.AdamW(self.model.parameters(), lr=lr, weight_decay=1e-5)
 
-        scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=5)
+        scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.4, patience=5)
 
         best_loss = float('inf')
         patience_counter = 0
-        patience = 10  # Early stopping patience
+        patience = 15  # Early stopping patience
 
         # Map interactions to indices
         user_indices = self.interactions_df[self.user_id_column].map(self.user_mapping)
@@ -198,8 +224,7 @@ class VGCF(Recommender):
 
         for epoch in range(epochs):
             optimizer.zero_grad()
-            out = self.model(self.graph_data)
-            user_embeddings = out
+            bottleneck_embedding, user_embeddings = self.model(self.graph_data)
 
             # Positive samples
             pos_user_tensor = torch.tensor(pos_user_indices, dtype=torch.long, device=self.device)
@@ -237,15 +262,14 @@ class VGCF(Recommender):
             loss_cosine = 1 - cos_sim.mean()
 
             # Total loss
-            loss = loss_bpr + 0.3 * loss_cosine  # Weight the cosine loss as needed
+            loss = loss_bpr + 1 * loss_cosine  # Weight the cosine loss as needed
+            # loss = loss_bpr  # Weight the cosine loss as needed
 
             loss.backward()
             optimizer.step()
 
             # Update scheduler
             scheduler.step(loss)
-
-            import pickle
 
             if loss.item() < best_loss:
                 best_loss = loss.item()
@@ -272,7 +296,7 @@ class VGCF(Recommender):
     def bpr_loss(self, pos_scores, neg_scores):
         return -torch.log(torch.sigmoid(pos_scores - neg_scores)).mean()
 
-    def get_recommendations(self, N=30):
+    def get_recommendations(self, N=50):
         # Build graph and model if not already done
         if self.graph_data is None:
             self.build_graph()
@@ -288,8 +312,8 @@ class VGCF(Recommender):
         # Switch to evaluation mode
         self.model.eval()
         with torch.no_grad():
-            node_embeddings = self.model(self.graph_data).cpu()
-
+            bottleneck_embedding, node_embeddings = self.model(self.graph_data)
+            node_embeddings = node_embeddings.cpu()
         recommendations_list = []
         num_users = len(self.user_mapping)
         num_items = len(self.item_mapping)

@@ -1,4 +1,4 @@
-import Recommender
+from Recommender import Recommender
 import numpy as np
 from sklearn.neighbors import NearestNeighbors
 import pandas as pd
@@ -7,9 +7,13 @@ from tqdm import tqdm
 from sklearn.metrics.pairwise import cosine_similarity, cosine_distances
 import heapq  # for using a heap (priority queue)
 
+
 # ----------------------------------------------------------------------------------------------------
 
 class ClusteredKNN(Recommender):
+
+    def __init__(self, content_df, interactions_df, users_df):
+        super().__init__(content_df, interactions_df, users_df)
 
     def get_recommendations(self):
         """
@@ -176,7 +180,6 @@ class ClusteredKNN(Recommender):
                         'clusters': user_clusters,
                         'previous_interactions': set(interactions[self.content_id_column].unique())
                     }
-
 
 # How to use the class:
 
