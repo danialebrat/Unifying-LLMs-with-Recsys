@@ -95,7 +95,7 @@ def plot_all_metrics(consolidated_df, metrics, save_path):
 
 
 def main():
-    data = "100k"
+    data = "1m"
     Path = f"Dataset/{data}/train_test_sets"
 
     # Load the ratings data
@@ -115,11 +115,11 @@ def main():
     # ---------------------------------------------------------------------
     # Load recommendation results for all recommenders
     recommenders_paths = {
-        "VGCF": f"output/{data}/vgcf_recommendations_{data}.csv",
+        "HGCF": f"output/{data}/vgcf_recommendations_{data}.csv",
         "LightGCN": f"output/{data}/lightgcn_result_{data}.csv",
         "NGCF": f"output/{data}/ngcf_result_{data}.csv",
-        "ALS": f"output/{data}/als_result_{data}.csv",
-        "GAT": f"output/{data}/gat_recommendations_{data}.csv"
+        "ALS": f"output/{data}/als_result_{data}.csv"
+        # "GAT": f"output/{data}/gat_recommendations_{data}.csv"
     }
     recommendations_dict = load_recommendations(recommenders_paths)
     # ---------------------------------------------------------------------
@@ -135,9 +135,10 @@ def main():
 
     # Define K values and metrics to evaluate
     k_values = [1, 5, 10, 20, 30, 40, 50]
-    metrics_to_plot = ["Precision", "Recall", "NDCG", "MRR", "MAP"]
+    metrics_to_plot = ["Precision", "Recall", "F1", "NDCG", "MRR", "MAP", "ItemCoverage", "Novelty", "ItemFairness"]
 
-    # Evaluate all recommenders
+
+# Evaluate all recommenders
     consolidated_results = evaluate_recommenders(
         test_df=testset_df,
         recommendations_dict=recommendations_dict,

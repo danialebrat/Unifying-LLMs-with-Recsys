@@ -48,6 +48,8 @@ class RecEvaluator:
         self.rank_col = rank_col
         self.module_source_col = module_source_col
         self.relevance_threshold = relevance_threshold
+        self.item_popularity = None
+        self.total_interactions = None
 
         self._prepare_data()
 
@@ -114,6 +116,11 @@ class RecEvaluator:
         else:
             # Should never happen in normal usage, but just in case
             self.evaluation_users = []
+
+        # Compute item popularity (frequency) from test_df
+        item_counts = self.test_df[self.item_id_col].value_counts()
+        self.item_popularity = item_counts.to_dict()
+        self.total_interactions = item_counts.sum()
 
     # -------------------------------------------------------------------------
     # Basic retrieval metrics
@@ -267,6 +274,147 @@ class RecEvaluator:
 
         return len(recommended_set) / len(all_items_in_test) if len(all_items_in_test) > 0 else 0.0
 
+    def average_popularity_at_k(self, k: int, module: Optional[str] = None) -> float:
+        """
+        Compute the average popularity of the top-k recommended items.
+        A lower average popularity indicates higher novelty.
+        Popularity is derived from the frequency of item appearances in test_df.
+        """
+        if not hasattr(self, "item_popularity"):
+            raise ValueError(
+                "Item popularity was not computed. Make sure you have updated _prepare_data()."
+            )
+
+        user_popularities = []
+        for user in self.evaluation_users:
+            recommended_items = self._get_top_k_items(user, k, module)
+            if not recommended_items:
+                continue
+
+            # Average popularity of recommended items
+            pop_sum = 0
+            for item in recommended_items:
+                pop_sum += self.item_popularity.get(item, 0)
+
+            avg_pop = pop_sum / len(recommended_items)
+            user_popularities.append(avg_pop)
+
+        return np.mean(user_popularities) if user_popularities else 0.0
+
+    def self_information_at_k(self, k: int, module: Optional[str] = None) -> float:
+        """
+        Compute the average self-information (-log2 p(i)) of the top-k recommended items,
+        where p(i) = frequency(item i) / total_interactions.
+        Higher average self-information indicates more novel (less popular) items.
+        """
+        if not hasattr(self, "item_popularity") or not hasattr(self, "total_interactions"):
+            raise ValueError(
+                "Item popularity or total interactions not computed. "
+                "Make sure you have updated _prepare_data()."
+            )
+
+        user_self_info = []
+        for user in self.evaluation_users:
+            recommended_items = self._get_top_k_items(user, k, module)
+            if not recommended_items:
+                continue
+
+            si_sum = 0.0
+            for item in recommended_items:
+                freq = self.item_popularity.get(item, 0)
+                if freq > 0:
+                    p = freq / self.total_interactions
+                    si_sum += -np.log2(p)
+                else:
+                    # If item not in test set (freq = 0), skip or treat as very high novelty
+                    # For example, you could do:
+                    # si_sum += 0  # ignoring it
+                    # or set it to some large penalty
+                    pass
+
+            avg_si = si_sum / len(recommended_items)
+            user_self_info.append(avg_si)
+
+        return np.mean(user_self_info) if user_self_info else 0.0
+
+    def item_fairness_gini_at_k(self, k: int, module: Optional[str] = None) -> float:
+        """
+        Compute the Gini index for item recommendation frequencies at rank <= k.
+        A lower Gini index indicates more equitable distribution (fairness) across items.
+        """
+        # 1. Gather the frequency of recommended items across all users
+        freq_map = {}
+        for user in self.evaluation_users:
+            recommended_items = self._get_top_k_items(user, k, module)
+            for item in recommended_items:
+                freq_map[item] = freq_map.get(item, 0) + 1
+
+        if not freq_map:
+            return 0.0  # or np.nan, depending on how you want to handle empty recs
+
+        frequencies = np.array(list(freq_map.values()), dtype=float)
+        return self._gini_index(frequencies)
+
+    def item_fairness_entropy_at_k(self, k: int, module: Optional[str] = None) -> float:
+        """
+        Compute the entropy (base 2) of the item recommendation frequency distribution.
+        A higher entropy indicates a more uniform distribution (fairness) across items.
+        """
+        freq_map = {}
+        for user in self.evaluation_users:
+            recommended_items = self._get_top_k_items(user, k, module)
+            for item in recommended_items:
+                freq_map[item] = freq_map.get(item, 0) + 1
+
+        if not freq_map:
+            return 0.0  # or np.nan
+
+        frequencies = np.array(list(freq_map.values()), dtype=float)
+        total = frequencies.sum()
+        p = frequencies / total
+
+        # Entropy in base 2: - sum(p_i * log2(p_i))
+        entropy = -np.sum(p * np.log2(p))
+        return entropy
+
+    def user_fairness_variance_at_k(self, k: int, module: Optional[str] = None) -> float:
+        """
+        Compute the variance in the number of relevant recommendations per user.
+        A lower variance indicates a more equitable (fair) distribution of relevance across users.
+        """
+        relevant_counts = []
+        for user in self.evaluation_users:
+            recommended_items = self._get_top_k_items(user, k, module)
+            rel_items = self.user_relevant_items.get(user, set())
+            # Count how many recommended items are relevant
+            hit_count = len(set(recommended_items) & rel_items)
+            relevant_counts.append(hit_count)
+
+        if not relevant_counts:
+            return 0.0
+
+        return float(np.var(relevant_counts, ddof=1))  # sample variance
+
+    # ------------------------------------------------------------------------------
+    # 3) Add private helper methods for Gini index and (optionally) for Entropy,
+    #    though entropy is simple enough to inline. For Gini:
+    # ------------------------------------------------------------------------------
+    def _gini_index(self, values: np.ndarray) -> float:
+        """
+        Compute the Gini index for a list/array of values.
+        Formula reference (one of several):
+          Gini = sum_i( sum_j( |x_i - x_j| ) ) / (2 * n * sum_i(x_i))
+        """
+        if len(values) == 0:
+            return 0.0
+
+        sorted_vals = np.sort(values)
+        n = len(values)
+        cumulative = np.cumsum(sorted_vals)
+        # This uses a known simplified expression for Gini with sorted data:
+        gini = (n + 1 - 2 * (cumulative / cumulative[-1]).sum()) / n
+        return gini
+
     # -------------------------------------------------------------------------
     # Public entry points for batch evaluations
     # -------------------------------------------------------------------------
@@ -302,6 +450,10 @@ class RecEvaluator:
             ap = self.average_precision_at_k(k, module)
             user_cov = self.user_coverage_at_k(k, module)
             item_cov = self.item_coverage_at_k(k, module)
+            novelty_avg_pop = self.average_popularity_at_k(k, module)
+            novelty_si = self.self_information_at_k(k, module)
+            fairness_gini = self.item_fairness_gini_at_k(k, module)
+            user_var = self.user_fairness_variance_at_k(k, module)
 
             results.append({
                 "K": k,
@@ -311,8 +463,9 @@ class RecEvaluator:
                 "NDCG": ndcg,
                 "MRR": mrr,
                 "MAP": ap,
-                "UserCoverage": user_cov,
-                "ItemCoverage": item_cov
+                "ItemCoverage": item_cov,
+                "Novelty": novelty_avg_pop,
+                "ItemFairness": fairness_gini,
             })
 
         df_results = pd.DataFrame(results)

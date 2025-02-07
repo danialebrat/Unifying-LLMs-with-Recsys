@@ -1,0 +1,20 @@
+{
+    "task":"ranking",
+    "loss_type":"bpr",
+    "embed_size":64,
+    "n_epochs":100,
+    "lr":0.0003,
+    "lr_decay":false,
+    "epsilon":1e-08,
+    "amsgrad":false,
+    "reg":0.0,
+    "batch_size":2048,
+    "num_neg":1,
+    "dropout_rate":0.1,
+    "n_layers":3,
+    "margin":1.0,
+    "sampler":"random",
+    "seed":42,
+    "lower_upper_bound":null,
+    "with_training":true
+}

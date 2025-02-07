@@ -1,0 +1,11 @@
+{
+    "task":"ranking",
+    "embed_size":64,
+    "n_epochs":50,
+    "reg":5.0,
+    "alpha":10,
+    "use_cg":false,
+    "n_threads":1,
+    "seed":42,
+    "lower_upper_bound":null
+}

@@ -1,0 +1,24 @@
+{
+    "task":"ranking",
+    "loss_type":"cross_entropy",
+    "embed_size":64,
+    "n_epochs":200,
+    "lr":0.0003,
+    "lr_decay":false,
+    "epsilon":1e-08,
+    "amsgrad":false,
+    "reg":0.0,
+    "batch_size":2048,
+    "num_neg":1,
+    "node_dropout":0.1,
+    "message_dropout":0.1,
+    "hidden_units":[
+        64,
+        64,
+        64
+    ],
+    "margin":1.0,
+    "sampler":"random",
+    "seed":42,
+    "lower_upper_bound":null
+}

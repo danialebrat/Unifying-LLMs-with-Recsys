@@ -11,7 +11,7 @@ from RecEvaluator import RecEvaluator
 # from baselines.NGCF import NGCF
 
 if __name__ == "__main__":
-    data = "100k"
+    data = "1m"
     Path = f"Dataset/{data}/train_test_sets"
 
     # Load the ratings data
@@ -25,7 +25,7 @@ if __name__ == "__main__":
                              names=['user_id', 'movie_id', 'rating', 'timestamp'],
                              encoding='latin-1')
 
-    users_df = pd.read_csv(f"Dataset/{data}/updated_users_with_summary_df.csv")
+    users_df = pd.read_csv(f"Dataset/{data}/updated_users_with_summary_df_{data}.csv")
     content_df = pd.read_pickle(f"Dataset/{data}/movies_enriched_dataset.pkl")
 
     # Filter rows where 'summary' and 'movie_info' are not null
@@ -66,30 +66,30 @@ if __name__ == "__main__":
     # ------------------------------------------------------------
     # vectorized VGCF
 
-    # recommender = VGCF(users_df=users_df, content_df=content_df, interactions_df=trainset_df)
-    # recommender.set_column_names(user_id_column="user_id",
-    #                             content_id_column="movie_id",
-    #                             user_attribute_column="summary_vector",
-    #                             content_attribute_column="movie_info_vector")
-    #
-    # vgcf_recommendations = recommender.get_recommendations()
-    # print("done")
-    # print(vgcf_recommendations.head())
-    # vgcf_recommendations.to_csv(f"vgcf_recommendations_{data}.csv")
-
-    # ------------------------------------------------------------
-    # vectorized VGCF
-
-    recommender = GCF(users_df=users_df, content_df=content_df, interactions_df=trainset_df)
+    recommender = VGCF(users_df=users_df, content_df=content_df, interactions_df=trainset_df)
     recommender.set_column_names(user_id_column="user_id",
                                 content_id_column="movie_id",
                                 user_attribute_column="summary_vector",
                                 content_attribute_column="movie_info_vector")
 
-    gat_recommendations = recommender.get_recommendations()
+    vgcf_recommendations = recommender.get_recommendations()
     print("done")
-    print(gat_recommendations.head())
-    gat_recommendations.to_csv(f"gat_recommendations_{data}.csv")
+    print(vgcf_recommendations.head())
+    vgcf_recommendations.to_csv(f"vgcf_recommendations_{data}.csv")
+
+    # ------------------------------------------------------------
+    # vectorized VGCF
+
+    # recommender = GCF(users_df=users_df, content_df=content_df, interactions_df=trainset_df)
+    # recommender.set_column_names(user_id_column="user_id",
+    #                             content_id_column="movie_id",
+    #                             user_attribute_column="summary_vector",
+    #                             content_attribute_column="movie_info_vector")
+    #
+    # gat_recommendations = recommender.get_recommendations()
+    # print("done")
+    # print(gat_recommendations.head())
+    # gat_recommendations.to_csv(f"gat_recommendations_{data}.csv")
 
     # ------------------------------------------------------------
 
@@ -112,7 +112,7 @@ if __name__ == "__main__":
     # Instantiate the evaluator
     rec_evaluator = RecEvaluator(
         test_df=testset_df,
-        recommendations_df=gat_recommendations,
+        recommendations_df=vgcf_recommendations,
         user_id_col="user_id",
         item_id_col="movie_id",
         rating_col="rating",  # Column in 'testset_df' for ratings

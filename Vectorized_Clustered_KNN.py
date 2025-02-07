@@ -40,7 +40,7 @@ class ClusteredKNN(Recommender):
         Optimized function for generating recommendations based on the K nearest neighbor of each cluster
         based on user previous interactions.
         """
-        total_recommendations = 45
+        total_recommendations = 50
         all_recommendations = []
 
         # Precompute cosine similarity rankings for all users
@@ -52,9 +52,6 @@ class ClusteredKNN(Recommender):
             profile = self.user_profiles[user_id]
             user_content, user_clusters = profile['content'], profile['clusters']
             user_previous_interactions = set(profile['previous_interactions'])
-
-            # Use a set for artist tracking to avoid duplicate artist recommendations
-            recommended_artists = set()
 
             if len(user_content[self.content_id_column].unique()) < 5:
                 # Process users with few interactions as a single cluster
@@ -128,57 +125,86 @@ class ClusteredKNN(Recommender):
              'module_source': 'str'})
 
     # ----------------------------------------------------------------------------------------------------
-
+    # ---------------------------------------------------------------------------------------------------
     def generate_user_profiles(self, batch_size=20):
         """
         Create user profiles with clusters, and precompute user vectors and previous interactions in batches.
+        Now using only movies with good ratings (4 or 5) for clustering and positive feedback,
+        and incorporating negative movies (rated 1 or 2) to adjust the user profile.
 
         Args:
-            batch_size: Number of users to process in each batch (default: 35)
-
-        :return: None (update user_profiles and cosine_scores)
+            batch_size: Number of users to process in each batch (default: 20)
         """
-
         user_ids = self.interactions_df[self.user_id_column].unique()
         remaining_users = len(user_ids)
 
-        with tqdm(total=len(user_ids), desc="Processing user data (batch)") as pbar:  # Use tqdm with total users
+        with tqdm(total=len(user_ids), desc="Processing user data (batch)") as pbar:
             while remaining_users > 0:
-                batch_size = min(batch_size, remaining_users)  # Use minimum of remaining users and desired batch size
-                user_id_chunk = user_ids[:batch_size]
-                user_ids = user_ids[batch_size:]
-                remaining_users -= batch_size
-                pbar.update(batch_size)  # Update progress bar for each batch
+                current_batch_size = min(batch_size, remaining_users)
+                user_id_chunk = user_ids[:current_batch_size]
+                user_ids = user_ids[current_batch_size:]
+                remaining_users -= current_batch_size
+                pbar.update(current_batch_size)
 
-                # Filter interactions and content for the current batch
-                batch_interactions = self.interactions_df[self.interactions_df[self.user_id_column].isin(user_id_chunk)]
+                # Get interactions for the current batch (all interactions, then filter per user)
+                batch_interactions = self.interactions_df[
+                    self.interactions_df[self.user_id_column].isin(user_id_chunk)
+                ]
                 batch_content = self.content_df[
-                    self.content_df[self.content_id_column].isin(batch_interactions[self.content_id_column])]
+                    self.content_df[self.content_id_column].isin(batch_interactions[self.content_id_column])
+                ]
 
-                # Process users in the current batch
                 for user_id, interactions in batch_interactions.groupby(self.user_id_column):
-                    user_content = batch_content[
-                        batch_content[self.content_id_column].isin(interactions[self.content_id_column])]
-                    user_vectors = user_content[self.content_attribute_column].values.tolist()
+                    # Separate interactions into good (4 or 5) and negative (1 or 2)
+                    good_interactions = interactions[interactions['rating'].isin([4, 5])]
+                    negative_interactions = interactions[interactions['rating'].isin([1, 2])]
 
-                    if len(user_content) < 5:
-                        user_clusters = list(range(len(user_content)))
+                    # Get the corresponding content for good and negative movies
+                    good_content = batch_content[
+                        batch_content[self.content_id_column].isin(good_interactions[self.content_id_column])
+                    ]
 
+                    # Extract the feature vectors for good and negative movies
+                    good_vectors = good_content[self.content_attribute_column].tolist()
+
+                    # Compute average vector for positive (good) movies
+                    if good_vectors:
+                        positive_vector = np.mean(np.array(good_vectors), axis=0)
                     else:
-                        # Compute cosine distance matrix
-                        distance_matrix = cosine_distances(user_vectors)
-                        clusterer = HDBSCAN(min_cluster_size=5, min_samples=3, metric='precomputed', algorithm='auto',
-                                            cluster_selection_method='eom')
-                        user_clusters = clusterer.fit_predict(distance_matrix)
+                        positive_vector = np.zeros(self.all_vectors.shape[1])
 
-                    user_vector = np.mean(np.array(user_vectors), axis=0)
+
+                    # Form the final user vector by subtracting negative from positive feedback
+                    user_vector = positive_vector
+
+                    # Compute cosine similarity scores between the user vector and all content vectors
                     self.cosine_scores[user_id] = cosine_similarity([user_vector], self.all_vectors)[0]
 
-                    # Store in user profiles (convert cluster labels to list)
+                    # Cluster only using good content; if too few good interactions, assign unique clusters
+                    if len(good_content) < 5:
+                        user_clusters = list(range(len(good_content)))
+                    else:
+                        # Compute cosine distance matrix for good vectors
+                        distance_matrix = cosine_distances(good_vectors)
+                        clusterer = HDBSCAN(
+                            min_cluster_size=5,
+                            min_samples=3,
+                            metric='precomputed',
+                            algorithm='auto',
+                            cluster_selection_method='eom'
+                        )
+                        user_clusters = clusterer.fit_predict(distance_matrix)
+
+                    # Combine all interactions (good and negative) to avoid recommending already seen content
+                    previous_interactions = set(good_interactions[self.content_id_column].unique()).union(
+                        set(negative_interactions[self.content_id_column].unique())
+                    )
+
+                    # Store the user profile with good content (for clustering), clusters, and previous interactions
                     self.user_profiles[user_id] = {
-                        'content': user_content,
+                        'content': good_content,
                         'clusters': user_clusters,
-                        'previous_interactions': set(interactions[self.content_id_column].unique())
+                        'previous_interactions': previous_interactions
                     }
 
 # How to use the class:
