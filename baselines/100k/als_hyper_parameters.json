@@ -1,7 +1,7 @@
 {
     "task":"ranking",
     "embed_size":64,
-    "n_epochs":200,
+    "n_epochs":100,
     "reg":5.0,
     "alpha":10,
     "use_cg":false,

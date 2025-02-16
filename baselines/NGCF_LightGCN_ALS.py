@@ -2,7 +2,7 @@ import time
 import pandas as pd
 import tensorflow as tf
 from libreco.algorithms import ALS, NGCF, LightGCN
-from libreco.data import DatasetPure, split_by_ratio_chrono
+from libreco.data import DatasetPure, split_by_ratio
 
 
 def reset_state(name):
@@ -103,8 +103,9 @@ if __name__ == "__main__":
     # ------------------------------------------------
 
     # Build train and eval sets
-    train_data, data_info = DatasetPure.build_trainset(trainset_df)
-    eval_data = DatasetPure.build_evalset(testset_df)
+    train_data, eval_data = split_by_ratio(trainset_df, test_size=0.1)
+    train_data, data_info = DatasetPure.build_trainset(train_data)
+    eval_data = DatasetPure.build_evalset(eval_data)
     print(data_info)
 
     data_info_ngcf = data_info
