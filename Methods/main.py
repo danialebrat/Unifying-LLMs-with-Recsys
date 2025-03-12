@@ -6,8 +6,8 @@ from VGCF import VGCF
 from Vectorized_Clustered_KNN import ClusteredKNN
 from UserBasedRecommender import UserBasedRecommender
 # from VNMF import VNMF
-from embedding_layer import EmbeddingLayer
-from RecEvaluator import RecEvaluator
+from Embedding.embedding_layer import EmbeddingLayer
+from Evaluation.RecEvaluator import RecEvaluator
 
 # from baselines.NGCF import NGCF
 
