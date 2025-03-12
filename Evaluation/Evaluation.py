@@ -1,7 +1,6 @@
 import pandas as pd
 import seaborn as sns
 from RecEvaluator import RecEvaluator
-from Plotter import Plotter
 
 
 def load_recommendations(path_dict):
@@ -218,8 +217,8 @@ def plot_all_metrics(consolidated_df,
 
 
 def main():
-    data = "1m"
-    Path = f"Dataset/{data}/train_test_sets"
+    data = "100k"
+    Path = f"../Dataset/{data}/train_test_sets"
 
     # Load the ratings data
     trainset_df = pd.read_csv(f'{Path}/u1.base',
@@ -232,30 +231,30 @@ def main():
                              names=['user_id', 'movie_id', 'rating', 'timestamp'],
                              encoding='latin-1')
 
-    # testset_df = pd.read_csv(f'Lusifer/{data}_test_set/enriched_test_set_{data}.csv')
+    testset_df = pd.read_csv(f'../Lusifer/{data}_test_set/enriched_test_set_{data}.csv')
 
     # ---------------------------------------------------------------------
     # ---------------------------------------------------------------------
     # cold start scenario
     # Count the number of interactions per user in the training set
-    # user_interaction_counts = trainset_df['user_id'].value_counts()
-    #
-    # # Identify cold start users: those with fewer than 5 interactions in trainset_df
-    # cold_start_users = user_interaction_counts[user_interaction_counts < 6].index.tolist()
-    #
-    # # Create a new testset_df that only includes rows for these cold start users
-    # testset_df = testset_df[testset_df['user_id'].isin(cold_start_users)]
+    user_interaction_counts = trainset_df['user_id'].value_counts()
+
+    # Identify cold start users: those with fewer than 5 interactions in trainset_df
+    cold_start_users = user_interaction_counts[user_interaction_counts < 6].index.tolist()
+
+    # Create a new testset_df that only includes rows for these cold start users
+    testset_df = testset_df[testset_df['user_id'].isin(cold_start_users)]
 
     # ---------------------------------------------------------------------
     # ---------------------------------------------------------------------
     # ---------------------------------------------------------------------
     # Load recommendation results for all recommenders
     recommenders_paths = {
-        "Our Method": f"output/{data}/vgcf_recommendations_{data}.csv",
-        "LightGCN": f"output/{data}/lightgcn_result_{data}.csv",
-        "NGCF": f"output/{data}/ngcf_result_{data}.csv",
-        "ALS": f"output/{data}/als_result_{data}.csv",
-        "GAT": f"output/{data}/gat_recommendations_{data}.csv"
+        "Our Method": f"../output/{data}/vgcf_recommendations_{data}.csv",
+        "LightGCN": f"../output/{data}/lightgcn_result_{data}.csv",
+        "NGCF": f"../output/{data}/ngcf_result_{data}.csv",
+        "ALS": f"../output/{data}/als_result_{data}.csv",
+        "GAT": f"../output/{data}/gat_recommendations_{data}.csv"
     }
     recommendations_dict = load_recommendations(recommenders_paths)
     # ---------------------------------------------------------------------
@@ -272,7 +271,7 @@ def main():
     # Define K values and metrics to evaluate
     k_values = [5, 10, 20, 30, 40, 50]
     # metrics_to_plot = ["Precision", "Recall", "F1", "NDCG", "MRR", "MAP", "ItemCoverage", "Novelty", "ItemFairness"]
-    metrics_to_plot = ["Precision", "Recall", "NDCG", "MAP", "ItemCoverage", "Novelty"]
+    metrics_to_plot = ["Precision", "Recall", "NDCG", "MAP", "F1", "ItemCoverage"]
 
     # Evaluate all recommenders
     consolidated_results = evaluate_recommenders(
@@ -293,7 +292,7 @@ def main():
     plot_all_metrics(
         consolidated_df=consolidated_results,
         metrics=metrics_to_plot,
-        save_path=f"evaluation_plot_comparison_{data}.svg"
+        save_path=f"evaluation_plot_comparison_{data}_coldstart.svg"
     )
 
     # plotter = Plotter()
@@ -302,7 +301,7 @@ def main():
     #                      save_path="evaluation_plot_comparison.png")
 
     # 7. Save the consolidated numeric results to a CSV file
-    consolidated_results.to_csv(f"evaluation_results_comparison_{data}.csv", index=False)
+    consolidated_results.to_csv(f"evaluation_results_comparison_{data}_coldstart_5.csv", index=False)
     print(f"Saved consolidated evaluation results to evaluation_results_comparison_{data}.csv")
 
 
