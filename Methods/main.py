@@ -13,7 +13,7 @@ from Evaluation.RecEvaluator import RecEvaluator
 
 if __name__ == "__main__":
     data = "100k"
-    Path = f"Dataset/{data}/train_test_sets"
+    Path = f"../Dataset/{data}/train_test_sets"
 
     # Load the ratings data
     trainset_df = pd.read_csv(f'{Path}/u1.base',
@@ -26,8 +26,8 @@ if __name__ == "__main__":
                              names=['user_id', 'movie_id', 'rating', 'timestamp'],
                              encoding='latin-1')
 
-    users_df = pd.read_csv(f"Dataset/{data}/updated_users_with_summary_df_{data}.csv")
-    content_df = pd.read_pickle(f"Dataset/{data}/movies_enriched_dataset.pkl")
+    users_df = pd.read_csv(f"../Dataset/{data}/updated_users_with_summary_df_{data}.csv")
+    content_df = pd.read_pickle(f"../Dataset/{data}/movies_enriched_dataset_{data}.pkl")
 
     # Filter rows where 'summary' and 'movie_info' are not null
     users_df = users_df.dropna(subset=["summary"])
