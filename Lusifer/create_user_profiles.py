@@ -161,12 +161,14 @@ def get_llm_response(prompt, instructions, max_retries=3):
 
 if __name__ == "__main__":
 
+    data = "100k"
+
     # loading data
-    users_df, movies_df, train_df = loading_data(data="1m")
-    users_df = pd.read_csv("updated_users_with_summary_df_1m.csv")
+    users_df, movies_df, train_df = loading_data(data=data)
+    # users_df = pd.read_csv(f"updated_users_with_summary_df_{data}.csv")
 
     # set LLM initial instruction
-    instructions = """You are an AI assistant that receives users information and you need to create a text output that describes user's preferences."""
+    instructions = """You are a Movie expert who knows everything about movies and can create a perfect detailed user profiles based on their watched history"""
 
     # Filtering out invalid movie_ids, make sure we have movie_info for every movie in the test set
     user_ids = train_df['user_id'].unique()
@@ -188,7 +190,7 @@ if __name__ == "__main__":
             continue
 
         # extract last_n_movies using get_last_n_movies()
-        last_n_movies = get_last_n_movies(user_id, train_df, movies_df, n=5)
+        last_n_movies = get_last_n_movies(user_id, train_df, movies_df, n=10)
 
         # creating prompt for the user
         prompt = create_prompt(last_n_movies)
@@ -214,9 +216,9 @@ if __name__ == "__main__":
 
         # save user_profile into users_df
         users_df.loc[users_df['user_id'] == user_id, 'user_profile'] = user_profile
-        users_df.to_csv("updated_users_with_summary_df_1m.csv", index=False)
+        users_df.to_csv(f"updated_users_with_summary_df_{data}.csv", index=False)
 
     # at the end, you might want to save users_df back to csv
-    users_df.to_csv("updated_users_with_summary_df_1m.csv", index=False)
+    users_df.to_csv(f"updated_users_with_summary_df_{data}.csv", index=False)
 
 
